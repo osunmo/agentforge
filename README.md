@@ -1,8 +1,44 @@
-# AgentForge backend
+# AgentForge
 
-This directory contains the first runnable backend vertical slice for AgentForge.
+AgentForge is a local-first AI agent factory that turns natural-language requests into deployable AI agents.
 
-It currently provides:
+Instead of manually wiring together models, APIs, tools, and workflows, a user can simply describe what they want:
+
+> “Connect my Gmail, Canvas, bank account, and calendar. Every Sunday, summarize my spending, upcoming assignments, and important unanswered emails.”
+
+AgentForge determines the required capabilities, connects the appropriate services, selects between local and cloud models, generates an agent specification, applies permissions and approval rules, and runs the resulting agent.
+
+## Core Architecture
+
+```text
+AgentForge
+├── Agent Builder
+├── Model Router
+│   ├── Ollama
+│   └── OpenRouter
+├── Agent Runtime
+│   └── Hermes
+├── Connector Platform
+│   ├── Gmail
+│   ├── Canvas
+│   ├── Plaid
+│   ├── GitHub
+│   ├── Google Calendar
+│   ├── Slack
+│   └── more
+├── Policy Engine
+├── Credential Broker
+├── Memory
+├── Scheduler / Event System
+├── Sandboxed Execution
+└── Audit / Activity Logs
+```
+
+## Current Backend Status
+
+This repository currently contains the first runnable backend vertical slice for AgentForge.
+
+It provides:
 
 - typed and validated AgentSpec V1 contracts;
 - deterministic compilation of the golden-path request;
@@ -18,101 +54,31 @@ It currently provides:
 - a synchronous runtime that produces a combined weekly briefing from mock or authorized tools;
 - FastAPI endpoints and end-to-end tests.
 
-Mock mode never contacts real accounts. The Gmail adapter can now search and read message metadata from an authorized account; live sending, deleting, and modifying email are intentionally unavailable. Discovered OpenAPI connectors can be authorized with OAuth but remain non-executable until a sandbox-tested HTTP adapter exists. Remote MCP registry search, token revocation, the Redis worker, scheduling, Hermes, and live model providers are later milestones.
+Mock mode never contacts real accounts.
 
-## Run locally
+The Gmail adapter can currently search and read message metadata from an authorized account. Live sending, deleting, and modifying email are intentionally unavailable.
 
-```powershell
-cd agentforge
-$env:AGENTFORGE_MASTER_KEY = python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-python -m uvicorn apps.api.app.main:app --reload
-```
+Discovered OpenAPI connectors can be authorized with OAuth but remain non-executable until a sandbox-tested HTTP adapter exists.
 
-Open `http://127.0.0.1:8000/docs` for the API explorer.
+Later milestones include:
 
-Save the generated master key in a local secret manager or ignored `.env` file and reuse it. If it changes, previously stored credentials cannot be decrypted. Credential endpoints fail closed when the key is absent or invalid. This V1 API assumes a trusted local machine and should not be exposed publicly; API authentication is a later milestone.
+- remote MCP registry search;
+- token revocation;
+- Redis worker execution;
+- scheduling;
+- Hermes runtime integration;
+- Ollama and OpenRouter model providers;
+- live Canvas and Plaid adapters;
+- generated connector sandboxing.
 
-## Test
+## Key Ideas
 
-```powershell
-cd agentforge
-python -m pytest
-```
-
-## Golden-path API flow
-
-1. `POST /v1/agents/compile`
-2. `POST /v1/agents`
-3. Connect `gmail`, `canvas`, and `plaid` using the connector endpoints.
-4. `POST /v1/agents/{agent_id}/deploy`
-5. `POST /v1/agents/{agent_id}/run`
-6. Inspect `/v1/runs/{run_id}` and `/v1/runs/{run_id}/audit`.
-
-## Universal connector discovery
-
-The platform is capability-driven rather than provider-driven. Use:
-
-- `POST /v1/discovery/resolve` to resolve normalized capabilities;
-- `POST /v1/discovery/openapi/inspect` to inspect an OpenAPI document without changing state;
-- `POST /v1/discovery/openapi/register` to persist its connector and tool definitions.
-
-OpenAPI documents are submitted as JSON. The service does not fetch arbitrary URLs during inspection. Read operations are allowed by default; inferred writes are conservatively marked as requiring human approval.
-
-## OAuth connection flow
-
-After registering a connector, configure and authorize its OAuth provider through:
-
-1. `POST /v1/oauth/{provider}/configure`
-2. `POST /v1/oauth/{provider}/start`
-3. Open the returned `authorization_url` in the user's browser.
-4. The provider redirects to `GET /v1/oauth/{provider}/callback`.
-5. Inspect `GET /v1/oauth/{provider}/status`.
-
-Provider client secrets and token responses are encrypted before persistence. OAuth state is hashed, PKCE uses `S256`, callback state is one-time and expires within ten minutes, and neither tokens nor authorization codes are written to audit details. `POST /v1/connectors/{provider}/disconnect` deletes the locally stored OAuth token.
-
-## Live Gmail setup
-
-Create a Google OAuth web client and configure the exact redirect URI used by your chosen test flow. Do not commit its client secret.
-
-The simplest test path is the built-in interface:
-
-1. Start the API and open `http://127.0.0.1:8000/gmail-demo`.
-2. Copy the redirect URI displayed by the interface into the Google OAuth client.
-3. Enter the OAuth client ID and secret, then select **Save and authorize Gmail**.
-4. Approve read-only Gmail access on Google's consent screen.
-5. After returning to AgentForge, select **Test Gmail** to view matching unanswered threads.
-
-Use the same host consistently: `127.0.0.1` and `localhost` are different OAuth redirect URIs. The interface renders email fields as plain text and never stores the client secret in browser storage.
-
-The equivalent API-only setup is:
-
-```powershell
-$env:GOOGLE_CLIENT_ID = "your-client-id"
-$env:GOOGLE_CLIENT_SECRET = "your-client-secret"
-
-$gmailOAuth = @{
-  authorization_endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
-  token_endpoint = "https://oauth2.googleapis.com/token"
-  client_id = $env:GOOGLE_CLIENT_ID
-  client_secret = $env:GOOGLE_CLIENT_SECRET
-  client_auth_method = "client_secret_post"
-  redirect_uri = "http://127.0.0.1:8000/v1/oauth/gmail/callback"
-  scopes = @("https://www.googleapis.com/auth/gmail.readonly")
-} | ConvertTo-Json
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri "http://127.0.0.1:8000/v1/oauth/gmail/configure" `
-  -ContentType "application/json" `
-  -Body $gmailOAuth
-
-$authorization = Invoke-RestMethod `
-  -Method Post `
-  -Uri "http://127.0.0.1:8000/v1/oauth/gmail/start"
-
-Start-Process $authorization.authorization_url
-```
-
-After Google redirects back to AgentForge, `GET /v1/oauth/gmail/status` should report `connected`. The runtime will then use live Gmail for `email.search` and `email.read`; Canvas and Plaid remain in deterministic mock mode until their live adapters are implemented.
-
-The Gmail scope is read-only but Google classifies Gmail data access as sensitive or restricted depending on the scope and usage. A development OAuth consent screen may require explicitly configured test users, while a public deployment may require Google verification.
+- Natural-language agent creation
+- Local-first execution for sensitive data
+- OpenRouter for cloud model access
+- Ollama for local models
+- Hermes as an initial agent runtime
+- Capability-based connector abstraction
+- MCP, OpenAPI, and native API integrations
+- Human approval for risky actions
+- Secure credential handling
