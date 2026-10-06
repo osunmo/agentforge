@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Authorize and test AgentForge's read-only Gmail connector.">
+  <meta name="color-scheme" content="light">
+  <title>AgentForge — Gmail live test</title>
+  <link rel="stylesheet" href="/static/gmail-demo.css">
+  <script src="/static/gmail-demo.js" defer></script>
+</head>
+<body>
+  <main class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/docs" aria-label="AgentForge API documentation">
+        <span class="brand-mark" aria-hidden="true">A</span>
+        <span>AgentForge</span>
+      </a>
+      <span class="environment"><i></i> Local Gmail test</span>
+    </header>
+
+    <section class="hero">
+      <div>
+        <span class="eyebrow">Connector diagnostic</span>
+        <h1>See the Gmail agent path work.</h1>
+        <p>Authorize read-only Gmail access, run a real inbox query, and inspect exactly what AgentForge gives the weekly briefing agent.</p>
+      </div>
+      <div class="security-chip">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.7 2.8 8.3 7 10 4.2-1.7 7-5.3 7-10V6l-7-3Z"/><path d="m9.2 12 1.8 1.8 3.9-4"/></svg>
+        <span><strong>Read-only</strong>Your tokens remain encrypted locally.</span>
+      </div>
+    </section>
+
+    <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
+
+    <section class="status-card" aria-labelledby="connection-heading">
+      <div>
+        <span class="section-number">Connection</span>
+        <h2 id="connection-heading">Gmail authorization</h2>
+      </div>
+      <div class="status-pill checking" id="statusPill"><i></i><span>Checking…</span></div>
+    </section>
+
+    <div class="content-grid">
+      <section class="card setup-card" aria-labelledby="setup-heading">
+        <div class="card-heading">
+          <span class="step">01</span>
+          <div><h2 id="setup-heading">Configure Google OAuth</h2><p>Use a Web application client from Google Cloud.</p></div>
+        </div>
+
+        <ol class="instructions">
+          <li>Create an OAuth 2.0 Client ID with application type <strong>Web application</strong>.</li>
+          <li>Add yourself as a test user on the OAuth consent screen.</li>
+          <li>Add this exact authorized redirect URI:</li>
+        </ol>
+
+        <div class="callback-box">
+          <code id="callbackUrl"></code>
+          <button id="copyCallback" type="button">Copy</button>
+        </div>
+
+        <form id="oauthForm" novalidate>
+          <label for="clientId">Google client ID</label>
+          <input id="clientId" name="client_id" type="text" autocomplete="off" placeholder="…apps.googleusercontent.com">
+
+          <label for="clientSecret">Google client secret</label>
+          <input id="clientSecret" name="client_secret" type="password" autocomplete="new-password" placeholder="Stored encrypted; never returned">
+
+          <p class="field-help">If Gmail was configured earlier, leave both fields empty to authorize again using the saved configuration.</p>
+
+          <button class="primary-button" id="authorizeButton" type="submit">
+            <span>Save and authorize Gmail</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </form>
+      </section>
+
+      <section class="card test-card" aria-labelledby="test-heading">
+        <div class="card-heading">
+          <span class="step">02</span>
+          <div><h2 id="test-heading">Run a live read test</h2><p>The query passes through policy, scope, and audit checks.</p></div>
+        </div>
+
+        <form id="testForm">
+          <label for="gmailQuery">Gmail search query</label>
+          <textarea id="gmailQuery" rows="4">in:inbox newer_than:14d -category:promotions -category:social {is:important is:starred is:unread}</textarea>
+
+          <div class="test-controls">
+            <label for="maxResults">Maximum results
+              <select id="maxResults">
+                <option value="3">3</option>
+                <option value="5" selected>5</option>
+                <option value="10">10</option>
+              </select>
+            </label>
+            <button class="primary-button" id="testButton" type="submit" disabled>
+              <span>Test Gmail</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg>
+            </button>
+          </div>
+        </form>
+
+        <div class="empty-results" id="emptyResults">
+          <span class="mail-glyph" aria-hidden="true">M</span>
+          <strong>Waiting for an authorized connection</strong>
+          <p>No email is loaded until you press “Test Gmail.”</p>
+        </div>
+
+        <div class="results" id="results" hidden>
+          <div class="result-summary">
+            <div><strong id="unansweredCount">0</strong><span>need attention</span></div>
+            <div><strong id="matchedCount">0</strong><span>threads matched</span></div>
+          </div>
+          <div class="message-list" id="messageList"></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="boundary-card">
+      <div>
+        <span class="step">03</span>
+        <div><h2>What this proves</h2><p>The same secure execution path used by an AgentForge run is reading Gmail.</p></div>
+      </div>
+      <ul>
+        <li><span>✓</span>OAuth token encrypted in the local database</li>
+        <li><span>✓</span>Least-privilege Gmail read-only scope</li>
+        <li><span>✓</span>Unanswered threads detected from the latest message</li>
+        <li><span>✓</span>No credentials written to results or audit details</li>
+      </ul>
+      <button class="text-button" id="disconnectButton" type="button" disabled>Disconnect and delete token</button>
+    </section>
+
+    <footer>
+      <span>AgentForge local development console</span>
+      <a href="/docs">Open API documentation</a>
+    </footer>
+  </main>
+</body>
+</html>
